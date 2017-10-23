@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>打飞机</title>
+    <style>
+        body{padding:0px;margin:0px;overflow: hidden;}
+        #cas{display: block;margin:auto;}
+        .showBg{background-color:transparent !important;}
+        .showSomething{position: fixed;left: 20px;top: 20px;}
+        .game{width: 700px;margin: auto;height: 100%;position: relative;}
+        .movebg{width:100%;height: 200%;background: url(image/bg_1_1.jpg);background-size:100% 50%;position: absolute;top: 0px;transform: translateY(-50%);-webkit-transform: translateY(-50%);-moz-transform: translateY(-50%);-webkit-animation: bganimate 10s infinite linear;animation: bganimate 10s infinite linear;-moz-animation: bganimate 10s infinite linear;z-index:-1;}
+        #point{width: 100%;height: 50px;position: absolute;top: 0px;color: #FFF;font: 20px "微软雅黑";display: none;}
+        #gameStart{position: absolute;width:100%;height: 90px;text-align: center;color: #FFF;font: 20px "微软雅黑";top: 410px;display: none;}
+        #gameStart #gs-start{display: inline-block;width: 180px;height: 60px;background-color: #CCC;color: #000;cursor: pointer;line-height: 60px;border-radius: 10px;border:5px solid #FFF;}
+        #gameStart #gs-start:hover{color: #f00;}
+        .showSomething{display: none;}
+        #god{position: absolute;display: block;right: -150px;top: 100px;width: 140px;text-align: center}
+        #verygod{position: absolute;display: block;right: -150px;top: 150px;width: 140px;text-align: center}
+        #pretygod{position: absolute;display: block;right: -150px;top: 200px;width: 140px;text-align: center}
+        #nogod{position: absolute;display: block;right: -150px;top: 250px;width: 140px;text-align: center}
+        @-webkit-keyframes bganimate{
+            from{-webkit-transform: translateY(-50%);}
+            to{-webkit-transform: translateY(0);}
+        }
+        @-moz-keyframes bganimate{
+            from{-webkit-transform: translateY(-50%);}
+            to{-webkit-transform: translateY(0);}
+        }
+    </style>
+</head>
+<body>
+<div class="game">
+    <div class="movebg"></div>
+    <canvas id='cas' width="700" height="720" >您的浏览器不支持canvas，请更新浏览器</canvas>
+</div>
+
+
+<script>
+//小工具
+function rnd(n,m){
+    return parseInt(Math.random()*(m-n))+n;
+}
+    function d2a(n) {
+        return n*Math.PI/180;
+    }
+    //加载数据
+    var JSON={};
+    function loadImage(arrSource,success,progress,error) {
+        var loaded=0;
+        for(var i=0;i<arrSource.length;i++){
+            var oImg=new Image();
+            (function (index) {
+                oImg.onload=function () {
+                    loaded++;
+                    JSON[arrSource[index]]=this;
+                    if(arrSource.length==loaded){
+                        success && success();
+                    }
+                    progress && progress(loaded,arrSource.length);
+                };
+                oImg.onerror=function () {
+                    error&&error();
+                };
+            })(i);
+            oImg.src='./image/'+arrSource[i];
+        }
+    }
+//resource
+    var resource=['bg_1_1.jpg','explosion.png','plasma.png','ship.png','coinText.png']
+//飞机
+var planeSize = [
+    null,
+    {x:0 , y:0 , w:24 , h:24},
+    {x:24 , y:0 , w:24 , h:24},
+    {x:48 , y:0 , w:24 , h:24},
+    {x:72 , y:0 , w:24 , h:24},
+    {x:96 , y:0 , w:24 , h:24},
+    {x:120 , y:0 , w:24 , h:24},
+    {x:144 , y:0 , w:24 , h:24}
+]
+//敌人飞机
+    class plane{
+        constructor(type){
+            this.type=type || 1;
+                this.x=0;
+                this.y=0;
+                this.speed=2;
+                this.rotate=0;
+                this.dr=1;
+                this.cur=0;
+                this.timer=null;
+                this.enemyMove();
+
+        }
+        draw(gd){
+            var w=planeSize[this.type].w;
+            var h=planeSize[this.type].h;
+            var x=planeSize[this.type].x;
+            var y=planeSize[this.type].y;
+            gd.save();
+            gd.translate(this.x,this.y);
+           gd.rotate(d2a(this.rotate));
+            gd.drawImage(JSON['ship.png'],
+                x,y,w,h,
+                0,0,w,h
+            );
+            gd.restore();
+        }
+       enemyMove(){
+            clearInterval(this.timer);
+            //飞行
+
+
+            this.timer=setInterval(function () {
+
+
+
+                this.y += this.speed;
+                this.x+=this.speed*this.dr;
+
+
+            }.bind(this),30);
+        }
+        isIn(x,y){
+            var a =this.x-10-x;
+            var b = this.y-10-y+50;
+            var c = Math.sqrt(a*a+b*b);
+            if(c<25){// 子弹与敌机中心为圆心，1/2宽为半径的圆距离判定
+                return true;
+            }else{
+                return false;
+            }
+        }
+    }
+//玩家飞机
+    class player{
+        constructor(type){
+            this.type=type || 1;
+            this.x=0;
+            this.y=0;
+            this.speed=5;
+            this.rotate=0;
+            this.cur=0;
+            this.timer=null;
+            this.timer2=null;
+            this.move();
+            this.moveLeft=0;
+            this.moveRight=0;
+            this.moveTop=0;
+            this.moveBottom=0;
+        }
+
+        draw(gd){
+            var w=planeSize[this.type].w;
+            var h=planeSize[this.type].h;
+            var x=planeSize[this.type].x;
+            var y=planeSize[this.type].y;
+            gd.save();
+            gd.translate(this.x,this.y);
+            gd.rotate(d2a(this.rotate));
+            gd.drawImage(JSON['ship.png'],
+                    this.cur*w,y,w,h,
+                    0,0,w,h
+            );
+            gd.restore();
+        }
+        move(){
+            clearInterval(this.timer);
+            this.timer=setInterval(function(){
+                this.cur++;
+                if(this.cur==4){
+                    this.cur=0;
+                }
+
+            }.bind(this),100);
+            //移动
+
+
+                clearInterval(this.timer2)
+                this.timer2=setInterval(function(){
+                    if(this.moveLeft==1){
+                        this.x-=this.speed;
+                    }
+                    if(this.moveRight==1){
+                        this.x+=this.speed;
+                    }
+                    if(this.moveTop==1){
+                        this.y-=this.speed;
+                    }
+                    if(this.moveBottom==1){
+                        this.y+=this.speed;
+                    }
+                }.bind(this),16);
+
+        }
+        isIn(x,y){
+            var a =this.x+12-x;
+            var b = this.y-y;
+            var c = Math.sqrt(a*a+b*b);
+            if(c<12){
+                return true;
+            }else{
+                return false;
+            }
+        }
+    }
+//子弹
+class bullet{
+    constructor(type){
+        this.type=type||1;
+        this.x=0;
+        this.y=0;
+        this.speed=5;
+        this.rotate=0;
+        this.timer=null;
+        this.move();
+    }
+    draw(gd){
+        gd.save();
+        gd.translate(this.x,this.y);
+        gd.rotate(d2a(this.rotate));
+        gd.drawImage(JSON['plasma.png'],
+                45,41,3,54,
+                10,-54,3,54
+        );
+        gd.restore();
+
+    }
+    move(){
+        clearInterval(this.timer);
+        this.timer=setInterval(function(){//前
+
+            this.x += Math.sin(d2a(this.rotate))*this.speed;
+            this.y -=  Math.cos(d2a(this.rotate))* this.speed;
+
+            if(this.x<-150||this.x>800||this.y<-150||this.y>800){
+                clearInterval(this.timer);
+            };
+
+        }.bind(this),30);
+    }
+}
+
+//原地爆炸
+var explosionCells = [
+        null,
+    {x:0 , y:0 , w:66 , h:64},
+    {x:64 , y:0 , w:68 , h:64},
+    {x:128 , y:0 , w:67 , h:64},
+    {x:194 , y:0 , w:61 , h:64},
+    {x:254 , y:0 , w:62 , h:64},
+    {x:317 , y:0 , w:67 , h:64},
+    {x:380 , y:0 , w:59 , h:64},
+    {x:445 , y:0 , w:61 , h:64},
+    {x:510 , y:0 , w:67 , h:64},
+    {x:574 , y:0 , w:69 , h:64},
+    {x:640 , y:0 , w:67 , h:64},
+    {x:705 , y:0 , w:65 , h:64},
+    {x:765 , y:0 , w:67 , h:64},
+    {x:830 , y:0 , w:67 , h:64}
+]
+class boom{
+    constructor(type){
+        this.type=type||1;
+        this.cur=0;
+        this.x=0;
+        this.y=0;
+        this.move();
+        this.timer=null;
+    }
+    draw(gd){
+        var x= explosionCells[this.type].x;
+        var y= explosionCells[this.type].y;
+        var w= explosionCells[this.type].w;
+        var h= explosionCells[this.type].h;
+        gd.save();
+        gd.translate(this.x,this.y);
+
+        gd.drawImage(JSON['explosion.png'],
+                x,y,w,h,
+                0,0,w,h
+        );
+        gd.restore();
+    }
+    move(){
+        clearInterval(this.timer);
+        var that=this;
+        this.timer=setInterval(function(){
+            that.type++;
+            if(that.type>14){
+               clearInterval(that.timer);
+                that.type=1;
+            }
+
+        },30)
+    }
+}
+//记分牌
+class numberCoin{
+    constructor(){
+        this.x=0;
+        this.y=578;
+        this.cur=0;
+    }
+    draw(gd,arr){
+        for(var i=0;i<6;i++){
+            this.x = 50+60*i;
+            this.cur = arr[i];
+            gd.save();
+            gd.scale(0.4,0.4);
+            gd.drawImage(JSON['coinText.png'],
+                    this.cur*36,0,36,49,
+                    this.x,20,36,49
+            );
+            gd.restore();
+        }
+    }
+}
+
+
+
+
+
+
+
+    //统一绘制
+    window.onload=function () {
+        var oC=document.getElementById("cas");
+        var gd=oC.getContext('2d');
+
+        loadImage(resource,init);
+        //初始化
+        function init() {
+            var arrEnemy=[];
+            var arrBullet=[];
+            var arrPlayer=[];
+            var arrBoom=[];
+            var score=0;
+            var out=150;
+            var count=0;
+            var chance=0.03;
+            setInterval(function () {
+                gd.clearRect(0,0,oC.width,oC.height);
+
+                if(Math.random()<chance){//敌机出现控制
+                    //实例化敌机
+                    var ey=new plane(rnd(5,8));
+                    ey.rotate=180;
+                    ey.x=rnd(12,oC.width-20);
+
+                    ey.y=-out;
+                    arrEnemy.push(ey);
+                    if(Math.random()<0.5){
+                        ey.dr=-1;
+                    }else {
+                        ey.dr=1;
+                    }
+                }
+
+                //子弹和敌机碰撞检测
+
+                    for(var i=0;i<arrEnemy.length;i++){
+                        for(var j=0;j<arrBullet.length;j++){
+                            var x1=arrBullet[j].x;
+                            var y1=arrBullet[j].y;
+                           try {
+                               if(arrEnemy[i]!=undefined){
+                                   if(arrEnemy[i].isIn(x1,y1)){
+                                       var x3=arrEnemy[i].x;
+                                       var y3=arrEnemy[i].y;
+                                       arrEnemy.splice(i--,1);
+                                       arrBullet.splice(i--,1);
+                                       //实例化爆炸
+                                       var bo=new boom(1);
+                                       bo.x=x3;
+                                       bo.y=y3;
+                                       arrBoom.push(bo);
+                                       score+=10;
+                                   }
+                               }
+
+                           }
+                           catch(e) {
+                               console.log(arrEnemy[i],11111111);
+                           }
+                        }
+                    }
+                    if(score>=100){
+                        chance=0.06;
+
+                    }else if(score>=500){
+                        chance=0.08;
+
+                    }else if(score>=1000){
+                        chance=1;
+
+                    }
+                //绘制爆炸
+                for(var i=0;i<arrBoom.length;i++){
+                    arrBoom[i].draw(gd);
+                    setTimeout(function(){
+                       arrBoom.length &&  clearInterval(arrBoom[0].timer);
+                        arrBoom.shift();
+                    },700)
+                }
+                //玩家和敌机碰撞检测
+                if(pl){
+                    for(var i=0;i<arrEnemy.length;i++){
+                        var x4=arrEnemy[i].x-12;
+                        var y4=arrEnemy[i].y-24;
+                        if(pl.isIn(x4,y4)){
+                            var bo1=new boom(1);
+                            bo1.x=pl.x;
+                            bo1.y=pl.y;
+                            arrBoom.push(bo1);
+                            pl=null;
+                            arrBullet=[];
+                            alert("游戏结束,点击确定重新开始");
+                            window.location.reload();
+                        }
+                    }
+                }
+
+
+
+
+
+
+                //绘制敌机
+                for(var i=0;i<arrEnemy.length;i++){
+                    arrEnemy[i].draw(gd);
+                }
+
+                //敌机优化
+                for( var i=0;i<arrEnemy.length;i++) {
+
+                    if(arrEnemy[i].x>680){
+
+                        arrEnemy[i].dr=-1;
+                    }else if(arrEnemy[i].x<20){
+                        arrEnemy[i].dr=1;
+                    }
+                    if(arrEnemy[i].y>800){
+                        clearInterval(arrEnemy[i].timer);
+                        arrEnemy.splice(i--,1);
+                    }
+                }
+
+
+                //绘制玩家飞机
+                if(pl) {
+                    pl.draw(gd);
+
+
+                    //玩家飞机优化
+                    for (var i = 0; i < arrPlayer.length; i++) {
+
+                    }
+
+                    count++;
+                    if (count % 40 == 0 || count == 1) {
+                        //绘制炮弹
+                        var b = new bullet();
+                        b.x = pl.x;
+                        b.y = pl.y;
+                        b.rotate = pl.rotate;
+                        arrBullet.push(b);
+                    }
+                    for (var i = 0; i < arrBullet.length; i++) {
+                        arrBullet[i].draw(gd);
+                    }
+                }
+                //画计分牌
+                var sum=score;
+                if(sum<10){
+                    sum = '00000'+sum;
+                }else if(sum<100){
+                    sum = '0000'+sum;
+                }else if(sum<1000){
+                    sum = '000'+sum;
+                }else if(sum<10000){
+                    sum = '00'+sum;
+                }else if(sum<100000){
+                    sum = '0'+sum;
+                }else{
+                    sum = sum+'';
+                }
+                var arr = sum.split('')
+                var num=new numberCoin();
+                num.draw(gd,arr);
+                //炮弹优化
+                for(var i=0;i<arrBullet.length;i++){
+                    if(arrBullet[i].x<-out || arrBullet[i].x>oC.width+out || arrBullet[i].y<-out || arrBullet[i].x>oC.height+out ){
+                        clearInterval(arrBullet[i].timer);
+                        arrBullet.splice(i--,1);
+                    }
+                }
+
+
+                //鼠标拖动
+
+
+
+
+
+            },16);
+
+
+            //绘制玩家
+            var pl=new player();
+            pl.x=0.5*oC.width;
+            pl.y=oC.height-200;
+            pl.rotate=0;
+            //键盘方向键控制飞机运动
+
+            document.onkeydown = function(e){
+                var evt=e||event;
+                switch(evt.keyCode){
+                   /* case 90:pl.rotateLeft=true;
+                        break;
+                    case 67:pl.rotateRight=true;
+                        break;*/
+                    case  37:pl.moveLeft = 1;
+
+                        break;
+                    case  38:pl.moveTop = 1;
+                        break;
+                    case 39:pl.moveRight = 1;
+                        break;
+                   case 40:pl.moveBottom = 1;
+                        break;
+                }
+            }
+
+            window.onkeyup = function(event){
+                switch(event.keyCode){
+                   /* case 90:pl.rotateLeft=false;
+                        break;
+                    case 67:pl.rotateRight=false;
+                        break;*/
+                    case  37:pl.moveLeft = 0;
+                        break;
+                    case  38:pl.moveTop = 0;
+                        break;
+                    case  39:pl.moveRight = 0;
+                        break;
+                    case  40:pl.moveBottom = 0;
+                        break;
+                }
+            }
+
+
+
+        }
+
+
+    }
+</script>
+</body>
+</html>
